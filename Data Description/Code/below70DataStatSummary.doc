@@ -1,0 +1,19 @@
+{\rtf1\fs24
+\pard\qc
+Table 1: Statistical Summary when Household debt < 70\par
+\trowd\trgaph75\trleft-75\intbl\trqc\clbrdrt\brdrs\cellx2160\clbrdrt\brdrs\cellx3456\clbrdrt\brdrs\cellx5184\clbrdrt\brdrs\cellx6912\clbrdrt\brdrs\cellx8208\clbrdrt\brdrs\cellx10080
+\ql \cell\qc (1)\cell\qc (2)\cell\qc (3)\cell\qc (4)\cell\qc (5)\cell\row
+\trowd\trgaph75\trleft-75\trqc\cellx2160\cellx3456\cellx5184\cellx6912\cellx8208\cellx10080
+\trowd\trgaph75\trleft-75\trqc\clbrdrb\brdrs\cellx2160\clbrdrb\brdrs\cellx3456\clbrdrb\brdrs\cellx5184\clbrdrb\brdrs\cellx6912\clbrdrb\brdrs\cellx8208\clbrdrb\brdrs\cellx10080
+\ql VARIABLES\cell\qc N\cell\qc mean\cell\qc sd\cell\qc min\cell\qc max\cell\row
+\trowd\trgaph75\trleft-75\trqc\cellx2160\cellx3456\cellx5184\cellx6912\cellx8208\cellx10080
+\ql \cell\qc \cell\qc \cell\qc \cell\qc \cell\qc \cell\row
+\ql private_debt\cell\qc 2,963.00\cell\qc 78.91\cell\qc 45.42\cell\qc 12.30\cell\qc 330.20\cell\row
+\ql household_debt\cell\qc 2,963.00\cell\qc 41.83\cell\qc 17.26\cell\qc 2.20\cell\qc 69.90\cell\row
+\ql CPI\cell\qc 2,963.00\cell\qc 85.64\cell\qc 26.48\cell\qc 14.17\cell\qc 169.31\cell\row
+\ql GDP\cell\qc 2,963.00\cell\qc 13958811.81\cell\qc 49837794.88\cell\qc 5,735.97\cell\qc 396469600.00\cell\row
+\ql Per_GDP\cell\qc 2,928.00\cell\qc 0.70\cell\qc 1.10\cell\qc -6.90\cell\qc 7.76\cell\row
+\ql Per_HHD\cell\qc 2,928.00\cell\qc 0.78\cell\qc 2.61\cell\qc -27.52\cell\qc 40.00\cell\row
+\trowd\trgaph75\trleft-75\trqc\trbrdrb\brdrs\clbrdrb\brdrs\cellx2160\clbrdrb\brdrs\cellx3456\clbrdrb\brdrs\cellx5184\clbrdrb\brdrs\cellx6912\clbrdrb\brdrs\cellx8208\clbrdrb\brdrs\cellx10080
+\ql \cell\qc \cell\qc \cell\qc \cell\qc \cell\qc \cell\row
+}

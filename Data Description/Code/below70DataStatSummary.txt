@@ -1,0 +1,11 @@
+Table 1: Statistical Summary when Household debt < 70						
+		(1)	(2)	(3)	(4)	(5)
+VARIABLES	LABELS	N	mean	sd	min	max
+						
+private_debt	private_debt	2,963.00	78.91	45.42	12.30	330.20
+household_debt	household_debt	2,963.00	41.83	17.26	2.20	69.90
+CPI	CPI	2,963.00	85.64	26.48	14.17	169.31
+GDP	GDP	2,963.00	13958811.81	49837794.88	5,735.97	396469600.00
+Per_GDP	Per_GDP	2,928.00	0.70	1.10	-6.90	7.76
+Per_HHD	Per_HHD	2,928.00	0.78	2.61	-27.52	40.00
+						
