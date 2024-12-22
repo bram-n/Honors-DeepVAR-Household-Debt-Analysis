@@ -7,6 +7,6 @@
 - Open ipynb files in VSCode or jupyter lab
 
 ## Sources
-Credit to https://github.com/mikhailsirenko/bivariate-choropleth for the Map Graph template 
-Data is gathered from the Bank for International Settlements and the International Monetary Fund
+- Credit to https://github.com/mikhailsirenko/bivariate-choropleth for the Map Graph template 
+- Data is gathered from the Bank for International Settlements and the International Monetary Fund
 
