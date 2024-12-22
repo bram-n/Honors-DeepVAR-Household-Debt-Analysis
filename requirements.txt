@@ -1,0 +1,9 @@
+pandas
+matplotlib
+numpy
+torch
+scikit-learn
+seaborn
+statsmodels
+geopandas
+contextily
