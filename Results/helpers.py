@@ -12,11 +12,6 @@ def get_country(df, country):
     return country_data
 
 
-def get_unlagged_variables(df):
-    list = []
-    for col in df.columns:
-        list.append(col) 
-    return list
 
 
 """ Splits each country's time series data into training and test sets, 

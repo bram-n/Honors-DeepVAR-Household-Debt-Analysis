@@ -10,7 +10,7 @@ from torch.utils.data import Dataset, DataLoader
 import helpers as hp
 import matplotlib.pyplot as plt
 import random
-
+import pytorch_lightning as pl
 
 def set_seed(seed=18):
     """Set all random seeds for reproducibility"""
@@ -19,18 +19,22 @@ def set_seed(seed=18):
     torch.backends.cudnn.deterministic = True
     np.random.seed(seed)
     random.seed(seed)
+    pl.seed_everything(seed)
 
-class TimeSeriesDataset_lstm(Dataset):
-    """Custom Dataset for time series data."""
-    def __init__(self, X, y):
+    
+
+class TimeSeriesDataset(Dataset):
+    """Dataset class for time series data."""
+    def __init__(self, X: torch.Tensor, y: torch.Tensor):
         self.X = X
         self.y = y
-    
-    def __len__(self):
+        
+    def __len__(self) -> int:
         return len(self.X)
     
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int):
         return self.X[idx], self.y[idx]
+
 
 class LSTM_Model(nn.Module):
     def __init__(self, input_size, hidden_size, output_size, num_layers=1): 
@@ -176,8 +180,8 @@ def train_lstm_model(all_lstm_data, inputs, output,
 
     X_train, X_test, y_train, y_test, scaler_X, scaler_y = prepare_lstm_data(all_lstm_data, inputs, output)
 
-    train_dataset_lstm = TimeSeriesDataset_lstm(X_train, y_train)
-    val_dataset_lstm = TimeSeriesDataset_lstm(X_test, y_test)
+    train_dataset_lstm = TimeSeriesDataset(X_train, y_train)
+    val_dataset_lstm = TimeSeriesDataset(X_test, y_test)
 
     train_loader_lstm = DataLoader(train_dataset_lstm, batch_size=batch_size, shuffle=True)
     val_loader_lstm = DataLoader(val_dataset_lstm, batch_size=batch_size, shuffle=False)
@@ -264,7 +268,7 @@ def train_lstm_model(all_lstm_data, inputs, output,
     return model_lstm, predictions_lstm, mse_lstm, rmse_lstm, mae_lstm, scaler_X, scaler_y
 
 def get_lstm_input(df, lags):
-    variables_unlagged = hp.get_unlagged_variables(df)
+    variables_unlagged = df.columns
     list = []
     for variable in variables_unlagged:
         for lag in range(1,lags + 1):
@@ -276,7 +280,7 @@ def create_lstm_data(df, lags):
     countries = df.index.get_level_values('Country').unique()
     for country in countries:
         country_data = hp.get_country(df, country).copy()
-        for col in hp.get_unlagged_variables(df):
+        for col in df.columns:
             for lag in range(1,lags+1):
                 country_data[f'{col}_lag{lag}'] = country_data[col].shift(lag)
         final_data = pd.concat([final_data, country_data], axis=0)
@@ -289,6 +293,39 @@ def train_test_split(df):
     train = train.dropna()
     test = test.dropna()
     return train, test
+
+def train_val_test_split(df, val_ratio=0.15):
+    """
+    Split the data into training, validation, and test sets while preserving time order
+    """
+    train, test = hp.time_panel_split_predict(df)
+    
+    # Calculate split point for validation set
+    train_len = len(train)
+    val_size = int(train_len * val_ratio)
+    
+    # Split training data into train and validation
+    val_split_idx = train_len - val_size
+    
+    # Split while maintaining index
+    train_final = train.iloc[:val_split_idx]
+    val = train.iloc[val_split_idx:]
+    
+    # Drop any rows with NaN values
+    train_final = train_final.dropna()
+    val = val.dropna()
+    test = test.dropna()
+    
+    return train_final, val, test
+
+
+
+
+
+
+
+
+
 
 def get_LSTM_RMSE_TOTAL(model, all_lstm_data, inputs, output):
     

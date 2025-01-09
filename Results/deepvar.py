@@ -56,9 +56,8 @@ def test_errors(df, test, variable, dict):
     total_squared_error = 0
     total_absolute_error = 0 
     total_samples = 0
-    inputs = hp.get_unlagged_variables(df)
+    inputs = df.columns
     for country in countries:
-        # country_data = hp.get_country(df, country)
         actual_values = hp.get_country(test, country)
         steps_to_predict = len(actual_values)
         predictions_dict = autoregressive_predict(actual_values, inputs, steps_to_predict, dict)
