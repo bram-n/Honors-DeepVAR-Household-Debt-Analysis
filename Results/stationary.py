@@ -20,12 +20,12 @@ def adf_test(df):
         # print("Series is not stationary")
         return False
     
-def difference(df):
-    return df.diff().dropna() 
+def difference(df, periods):
+    return df.diff(periods=periods).dropna() 
         
 '''Detrends data if it doesn't pass the ADF test. Detrends by country. 
 Stores trend in a dataframe for visualization purposes.'''
-def detrend_data(df, inputs):
+def detrend_data(df, inputs, periods):
     final_detrend = pd.DataFrame()
     final_trend = pd.DataFrame()
     unique_countries = df.index.get_level_values('Country').unique()
@@ -35,9 +35,9 @@ def detrend_data(df, inputs):
         country_data = hp.get_country(df, country)
         country_detrend = country_data.copy()
         for column in inputs:
-            if column in country_data.columns:
-                # Apply first difference to the column
-                country_detrend[column] = difference(country_data[column])
+            # if column in country_data.columns:
+            if column != 'policy_rate':
+                country_detrend[column] = difference(country_data[column], periods)
         final_detrend = pd.concat([final_detrend, country_detrend], axis=0)
         final_detrend = final_detrend.dropna()
     return final_detrend

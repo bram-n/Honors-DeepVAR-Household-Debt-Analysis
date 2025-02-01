@@ -46,7 +46,7 @@ def run_VAR_predict(df, train, test, lags):
     predictions_var = results.forecast(train.values[-lags:], steps=len(test))
     time_periods = df.index.get_level_values('TIME_PERIOD')
     country = df.index.get_level_values('Country')[-1]
-    time_index = pd.date_range(start=time_periods[-len(test)], periods=len(test), freq='QE')
+    time_index = pd.date_range(start=time_periods[-len(test)], periods=len(test), freq='Q')
 
     prediction_index = pd.MultiIndex.from_product([[country], time_index], names=['Country', 'TIME_PERIOD'])
 
@@ -81,7 +81,7 @@ def get_test_errors(df, train, test, lags, variable):
     total_mse = total_squared_error / total_samples
     rmse = np.sqrt(total_mse)
     total_mae = total_absolute_error / total_samples #TODO check why this return was mae?
-    return total_mse, rmse, total_mae
+    return [total_mse, rmse, total_mae]
 
 '''Retrends a countries data given the dataframe that stores the datas trend. 
 Meant for retrending VAR predictions data '''

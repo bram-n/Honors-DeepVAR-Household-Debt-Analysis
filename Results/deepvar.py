@@ -4,7 +4,6 @@ import pandas as pd
 import lstm
 import helpers as hp
 
-
 def predict_next(model, scaler_X, scaler_y, current_input):
     scaled_input = scaler_X.transform(current_input)
     input_tensor = torch.FloatTensor(scaled_input).unsqueeze(0)
@@ -17,7 +16,7 @@ def predict_next(model, scaler_X, scaler_y, current_input):
 def autoregressive_predict(df, inputs, steps_to_predict, dict):
     lstm.set_seed()
     # Evaluate all models
-    for model, _, _ in dict.values():
+    for model, _, _, _, _ in dict.values():
         model.eval()
     
     # Prepare initial input
@@ -30,8 +29,7 @@ def autoregressive_predict(df, inputs, steps_to_predict, dict):
     with torch.no_grad(): #no grad since predicting
         for _ in range(steps_to_predict):
             new_row = {}
-            
-            for variable, (model, scaler_X, scaler_y) in dict.items():
+            for variable, (model, _, _, scaler_X, scaler_y) in dict.items():
                 # Predict for each variable
                 prediction = predict_next(model, scaler_X, scaler_y, current_input)
                 
@@ -48,11 +46,10 @@ def autoregressive_predict(df, inputs, steps_to_predict, dict):
     
     return predictions_dict
 
-def test_errors(df, test, variable, dict):
+def test_errors(df, test, variable, dictionary, inputs):
     lstm.set_seed()
-    
     countries = df.index.get_level_values('Country').unique()
-    df = df.drop(columns = {'log_pd', 'log_hhd', 'log_CPI', 'log_GDP'})
+    df = df.drop(columns = inputs)
     total_squared_error = 0
     total_absolute_error = 0 
     total_samples = 0
@@ -60,7 +57,7 @@ def test_errors(df, test, variable, dict):
     for country in countries:
         actual_values = hp.get_country(test, country)
         steps_to_predict = len(actual_values)
-        predictions_dict = autoregressive_predict(actual_values, inputs, steps_to_predict, dict)
+        predictions_dict = autoregressive_predict(actual_values, inputs, steps_to_predict, dictionary)
         prediction = predictions_dict[variable]
         fitted_values = pd.DataFrame(prediction, columns=[variable])
         mse = hp.calculate_mse(actual_values, fitted_values, variable, 0)
@@ -77,3 +74,14 @@ def test_errors(df, test, variable, dict):
     rmse = np.sqrt(total_mse)
     total_mae = total_absolute_error / total_samples
     return [total_mse, rmse, total_mae]
+
+
+'''Gets the model, the X scaler and the y scaler in that order and stores it in a dictionary'''
+def get_model_and_scaler(df, variables, inputs, param_dict):
+    dictionary = {}
+    for variable in variables:
+        learning_rate = param_dict[variable]['learning_rate']
+        epochs = param_dict[variable]['epochs']
+        model, predictions, errors, scaler_X, scaler_y = lstm.train_lstm_model(df, inputs, [variable], learning_rate,     num_epochs=epochs)
+        dictionary[variable] = [model, predictions, errors, scaler_X, scaler_y]
+    return dictionary

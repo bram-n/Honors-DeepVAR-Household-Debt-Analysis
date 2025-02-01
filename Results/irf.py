@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 
 def predict(df, inputs, variable_to_shock, shock_value, variable, steps_to_predict, dict):
-    for model, _, _ in dict.values():
+    for model, _, _, _, _ in dict.values():
         model.eval()
     input_data = df.iloc[0][inputs].to_frame().T
     current_input = input_data.to_numpy().reshape(1, -1)
@@ -16,7 +16,7 @@ def predict(df, inputs, variable_to_shock, shock_value, variable, steps_to_predi
         for _ in range(steps_to_predict):
             new_row = {}
             
-            for var, (model, scaler_X, scaler_y) in dict.items():
+            for var, (model, _, _, scaler_X, scaler_y) in dict.items():
                 prediction = deepvar.predict_next(model, scaler_X, scaler_y, current_input)
                 
                 baseline_predictions[var].append(prediction)
@@ -40,7 +40,7 @@ def predict(df, inputs, variable_to_shock, shock_value, variable, steps_to_predi
         for _ in range(steps_to_predict):
             new_shocked_row = {}
             
-            for var, (model, scaler_X, scaler_y) in dict.items():
+            for var, (model, _,_, scaler_X, scaler_y) in dict.items():
                 shocked_prediction = deepvar.predict_next(model, scaler_X, scaler_y, current_shocked_input)
                 
                 shocked_predictions[var].append(shocked_prediction)

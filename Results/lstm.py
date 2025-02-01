@@ -265,7 +265,9 @@ def train_lstm_model(all_lstm_data, inputs, output,
     print('RMSE:', rmse_lstm)
     print('MAE:', mae_lstm)
 
-    return model_lstm, predictions_lstm, mse_lstm, rmse_lstm, mae_lstm, scaler_X, scaler_y
+    errors = [mse_lstm, rmse_lstm, mae_lstm]
+
+    return model_lstm, predictions_lstm, errors, scaler_X, scaler_y
 
 def get_lstm_input(df, lags):
     variables_unlagged = df.columns
@@ -318,15 +320,6 @@ def train_val_test_split(df, val_ratio=0.15):
     
     return train_final, val, test
 
-
-
-
-
-
-
-
-
-
 def get_LSTM_RMSE_TOTAL(model, all_lstm_data, inputs, output):
     
     scaler_X_lstm = StandardScaler()
@@ -360,7 +353,8 @@ def get_LSTM_RMSE_TOTAL(model, all_lstm_data, inputs, output):
 
 
 def fill_forecast_values(df, inputs, variable, dict):
-    model, scaler_X, scaler_y = dict[variable]
+    print(dict[variable])
+    model, _, _, scaler_X, scaler_y = dict[variable]
     forecast_features = df[inputs]    
         
     X_scaled = scaler_X.transform(forecast_features)

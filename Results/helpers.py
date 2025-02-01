@@ -17,7 +17,6 @@ def get_country(df, country):
 """ Splits each country's time series data into training and test sets, 
 using the window of each country's data for training"""
 def time_panel_split_predict(data, train_fraction=0.8):
-
     # Create empty DataFrames for training and testing
     train_data = pd.DataFrame()
     test_data = pd.DataFrame()
@@ -110,11 +109,18 @@ def calculate_percent_improvement(deepvar_metrics, compare_metrics):
     
     return improvements
 
-def kdensity(df, variable):
-    sns.kdeplot(df[variable], shade=True)
+def visualize_model_performance(y_test, y_pred):
+    plt.figure(figsize=(12, 6))
 
-    plt.title(f"Density Plot of {variable}")
-    plt.xlabel("Value")
-    plt.ylabel("Density")
+    plt.plot(y_test, label='True Values', color='skyblue', linestyle='-', linewidth=2)
+    plt.plot(y_pred, label='Predicted Values', color='orange', linestyle='--', linewidth=2)
 
+    plt.xlabel('Time', fontsize=14)
+    plt.ylabel('Target', fontsize=14)
+    plt.title('True vs. Predicted Values Over Time', fontsize=16)
+    
+    plt.legend(fontsize=12, loc='upper left')
+
+    plt.tight_layout()
+    plt.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.7)
     plt.show()
