@@ -42,6 +42,7 @@ def get_fulldata_RMSE(df, lags, variable, inputs):
 '''runs the vector autoregression model on a train set and gets the predictions for a test dataframe.'''
 def run_VAR_predict(df, train, test, lags):
     model_var = VAR(train)
+    print(lags)
     results = model_var.fit(lags) 
     predictions_var = results.forecast(train.values[-lags:], steps=len(test))
     time_periods = df.index.get_level_values('TIME_PERIOD')

@@ -5,6 +5,7 @@ import helpers as hp
 import var
 import lstm
 import deepvar
+import panelvar as pvar
 
 def plot_country_comparison(country, variable, inputs_lstm, inputs_var, lags, var_data, all_lstm_data, dict):
     country_data = hp.get_country(all_lstm_data, country)
@@ -28,11 +29,16 @@ def plot_country_comparison(country, variable, inputs_lstm, inputs_var, lags, va
     plt.show()
 
 
-def plot_country_predictions_test(country, variable, inputs, lags, df, dict, train_dt_var, test_dt_var, final_detrend, train_fraction=0.8):
+def plot_country_predictions_test(country, variable, inputs, lags, df, dict, train_dt_var, test_dt_var, final_detrend, panel_var_coef, train_fraction=0.8):
     # VAR graph prediction/preparation
     country_data = hp.get_country(df, country)
     country_var_detrend_predict, _ = var.get_VAR_predict(final_detrend, train_dt_var, test_dt_var, country, lags)
 
+
+    coeff_matrices = pvar.create_coefficient_matrices(panel_var_coef)
+    panel_predictions, _ = pvar.get_panel_VAR_predict(
+        final_detrend, test_dt_var, country, lags, coeff_matrices
+    )
     # LSTM predictions on actual data
     country_test_data = hp.get_test_data(country_data, train_fraction=train_fraction)
     lstm_predict = lstm.fill_forecast_values(country_test_data, inputs, variable, dict)
@@ -51,7 +57,9 @@ def plot_country_predictions_test(country, variable, inputs, lags, df, dict, tra
     plt.plot(country_var_detrend_predict.index.get_level_values('TIME_PERIOD'), country_var_detrend_predict[variable], label=f"{country} VAR Predicted", color='green', linestyle='--')
     plt.plot(lstm_predict.index.get_level_values('TIME_PERIOD'), lstm_predict[variable], label=f"{country} LSTM Forecast", color='orange', linestyle='--')
     plt.plot(deepvar_predict_df.index.get_level_values('TIME_PERIOD'), deepvar_predict_df [variable], label=f"{country} Deep VAR Forecast", color='red', linestyle='--')
-
+    plt.plot(panel_predictions.index.get_level_values('TIME_PERIOD'),
+             panel_predictions[variable], label='Panel VAR', color='purple')
+    
     plt.title(f'{variable} Predictions for {country} Compared to Actual')
     plt.xlabel('Date')
     plt.ylabel(f'{variable}')
@@ -62,4 +70,6 @@ def plot_country_predictions_test(country, variable, inputs, lags, df, dict, tra
     
     plt.show()
 
+
+    
 

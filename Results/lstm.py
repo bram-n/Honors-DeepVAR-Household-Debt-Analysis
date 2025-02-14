@@ -11,6 +11,7 @@ import helpers as hp
 import matplotlib.pyplot as plt
 import random
 import pytorch_lightning as pl
+# from laplace import Laplace
 
 def set_seed(seed=18):
     """Set all random seeds for reproducibility"""
@@ -353,7 +354,6 @@ def get_LSTM_RMSE_TOTAL(model, all_lstm_data, inputs, output):
 
 
 def fill_forecast_values(df, inputs, variable, dict):
-    print(dict[variable])
     model, _, _, scaler_X, scaler_y = dict[variable]
     forecast_features = df[inputs]    
         
