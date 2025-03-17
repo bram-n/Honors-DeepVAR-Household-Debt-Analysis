@@ -1,9 +1,9 @@
 from statsmodels.tsa.stattools import adfuller
 from statsmodels.tsa.api import VAR
+from statsmodels.tools.eval_measures import aic
 import pandas as pd
 import helpers as hp
 import numpy as np
-# error still figure it out.
 
 def run_basic_VAR(data, lags, inputs):
     model_var = VAR(data)
@@ -42,7 +42,6 @@ def get_fulldata_RMSE(df, lags, variable, inputs):
 '''runs the vector autoregression model on a train set and gets the predictions for a test dataframe.'''
 def run_VAR_predict(df, train, test, lags):
     model_var = VAR(train)
-    print(lags)
     results = model_var.fit(lags) 
     predictions_var = results.forecast(train.values[-lags:], steps=len(test))
     time_periods = df.index.get_level_values('TIME_PERIOD')
@@ -70,14 +69,12 @@ def get_test_errors(df, train, test, lags, variable):
     total_samples = 0
     for country in countries:
         fitted_values, actual_values = get_VAR_predict(df, train, test, country, lags)
-        mse = hp.calculate_mse(actual_values, fitted_values, variable, 0)
+        mse = hp.calculate_mse(actual_values, fitted_values, variable)
         total_squared_error += mse * len(actual_values[variable]) 
         mae = hp.calculate_mae(actual_values, fitted_values, variable)
         total_absolute_error += mae * len(actual_values[variable])
-        
         total_samples += len(actual_values[variable])
         
-        # print(f"{country} MAE: {mae}")
     
     total_mse = total_squared_error / total_samples
     rmse = np.sqrt(total_mse)
@@ -92,3 +89,18 @@ def retrend(detrend, trend, country):
     retrend_df = country_detrend.add(country_trend)
     retrend_df = retrend_df.dropna()
     return retrend_df
+
+
+def aic_test(df):
+    unique_countries = df.index.get_level_values('Country').unique()
+    best_lag = []
+    for country in unique_countries:
+        country_data = hp.get_country(df, country)
+        aic_scores = {}
+        for lag_order in range(1, 9):  
+            model = VAR(country_data)
+            results = model.fit(lag_order)
+            aic_scores[lag_order] = results.aic
+        best_lag.append(min(aic_scores, key=aic_scores.get))
+
+    return best_lag

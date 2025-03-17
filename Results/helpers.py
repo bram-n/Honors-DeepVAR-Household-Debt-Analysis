@@ -50,31 +50,31 @@ def exclude_country(df, country):
     return newdf
 
 
-def create_model_comparison_latex_table(lstm_metrics, var_metrics, var_no_outlier_metrics):
+def create_model_comparison_latex_table(lstm_metrics, var_metrics, var_no_outlier_metrics, pvar_metrics):
     latex_table = r"""\begin{{table}}[htbp]
 \centering
 \caption{{Model Performance Comparison}}
 \begin{{tabular}}{{lccc}}
 \hline
-\textbf{{Metric}} & \textbf{{DeepVAR}} & \textbf{{VAR}} & \textbf{{VAR (Excluding Growth Outliers)}} \\
+\textbf{{Metric}} & \textbf{{DeepVAR}} & \textbf{{VAR}} & \textbf{{VAR (Excluding Growth Outliers)}} & \textbf{{Panel VAR}} \\
 \hline
-Mean Squared Error (MSE) & {:.6f} & {:.6f} & {:.6f} \\
-Root Mean Squared Error (RMSE) & {:.6f} & {:.6f} & {:.6f} \\
-Mean Absolute Error (MAE) & {:.6f} & {:.6f} & {:.6f} \\
+Mean Squared Error (MSE) & {:.6f} & {:.6f} & {:.6f} & {:.6f} \\
+Root Mean Squared Error (RMSE) & {:.6f} & {:.6f} & {:.6f} & {:.6f} \\
+Mean Absolute Error (MAE) & {:.6f} & {:.6f} & {:.6f} & {:.6f} \\
 \hline
 \end{{tabular}}
 \end{{table}}""".format(
-        lstm_metrics[0], var_metrics[0], var_no_outlier_metrics[0],
-        lstm_metrics[1], var_metrics[1], var_no_outlier_metrics[1],
-        lstm_metrics[2], var_metrics[2], var_no_outlier_metrics[2]
+        lstm_metrics[0], var_metrics[0], var_no_outlier_metrics[0], pvar_metrics[0],
+        lstm_metrics[1], var_metrics[1], var_no_outlier_metrics[1], pvar_metrics[1],
+        lstm_metrics[2], var_metrics[2], var_no_outlier_metrics[2], pvar_metrics[2]
     )
 
     return latex_table
 
 
-def calculate_mse(actual, predicted, variable, lags):
-    actual_values_lagged = actual.iloc[lags:]
-    fitted_values_lagged = predicted.iloc[lags:]
+def calculate_mse(actual, predicted, variable):
+    actual_values_lagged = actual.iloc[0:]
+    fitted_values_lagged = predicted.iloc[0:]
     
     actual_values = actual_values_lagged[variable].values
     fitted_values = fitted_values_lagged[variable].values

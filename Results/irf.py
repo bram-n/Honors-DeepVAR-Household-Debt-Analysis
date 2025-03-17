@@ -4,8 +4,8 @@ import deepvar
 import pandas as pd
 import matplotlib.pyplot as plt
 
-
-def predict(df, inputs, variable_to_shock, shock_value, variable, steps_to_predict, dict):
+# TODO comment this
+def predict(df, inputs, variable_to_shock, shock_value, variable, steps_to_predict, dict, LAGS):
     for model, _, _, _, _ in dict.values():
         model.eval()
     input_data = df.iloc[0][inputs].to_frame().T
@@ -22,7 +22,7 @@ def predict(df, inputs, variable_to_shock, shock_value, variable, steps_to_predi
                 baseline_predictions[var].append(prediction)
 
                 new_row[f'{var}_lag1'] = prediction
-                for lag in range(2, 4):
+                for lag in range(2, LAGS):
                     new_row[f'{var}_lag{lag}'] = input_data[f'{var}_lag{lag-1}'].values[0]
             
             # Update input data for next iteration

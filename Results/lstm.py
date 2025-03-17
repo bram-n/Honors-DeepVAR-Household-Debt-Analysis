@@ -2,16 +2,13 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import StandardScaler
-import torch
-import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import helpers as hp
 import matplotlib.pyplot as plt
 import random
+from pytorch_lightning.tuner import Tuner
 import pytorch_lightning as pl
-# from laplace import Laplace
 
 def set_seed(seed=18):
     """Set all random seeds for reproducibility"""
@@ -23,7 +20,6 @@ def set_seed(seed=18):
     pl.seed_everything(seed)
 
     
-
 class TimeSeriesDataset(Dataset):
     """Dataset class for time series data."""
     def __init__(self, X: torch.Tensor, y: torch.Tensor):
@@ -37,65 +33,249 @@ class TimeSeriesDataset(Dataset):
         return self.X[idx], self.y[idx]
 
 
-class LSTM_Model(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size, num_layers=1): 
-        super(LSTM_Model, self).__init__()
-        torch.manual_seed(10)
-
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
+class LSTM_Model(pl.LightningModule):
+    def __init__(self, 
+                 input_size, 
+                 hidden_size, 
+                 output_size, 
+                 num_layers=1, 
+                 learning_rate=0.0005, 
+                 weight_decay=0.1):
+        super().__init__()
         
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers=num_layers, 
-                           batch_first=True, dropout=0.5)
+        self.save_hyperparameters()
+        
+        self.lstm = nn.LSTM(
+            input_size=input_size, 
+            hidden_size=hidden_size, 
+            num_layers=num_layers, 
+            batch_first=True, 
+            dropout=0.5
+        )
         
         self.batch_norm = nn.BatchNorm1d(hidden_size)
-        self.dropout = nn.Dropout(0.5)  
+        self.dropout = nn.Dropout(0.5)
         
         self.fc = nn.Linear(hidden_size, output_size)
+        
+        self.criterion = nn.MSELoss()
 
     def forward(self, x):
-        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(x.device)
-        c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(x.device)
+        h0 = torch.zeros(self.hparams.num_layers, x.size(0), self.hparams.hidden_size).to(x.device)
+        c0 = torch.zeros(self.hparams.num_layers, x.size(0), self.hparams.hidden_size).to(x.device)
         
         out, _ = self.lstm(x, (h0, c0))
-        out = out[:, -1, :]
+        out = out[:, -1, :]  # Take the last time step
         out = self.batch_norm(out)
         out = self.dropout(out)
         out = self.fc(out)
         return out
 
+    def training_step(self, batch, batch_idx):
+        x, y = batch
+        y_hat = self(x)
+        loss = self.criterion(y_hat, y)
+        self.log('train_loss', loss, prog_bar=True)
+        return loss
 
-def prepare_lstm_data(all_lstm_data, inputs, output):
+    def validation_step(self, batch, batch_idx):
+        x, y = batch
+        y_hat = self(x)
+        val_loss = self.criterion(y_hat, y)
+        self.log('val_loss', val_loss, prog_bar=True)
+        return val_loss
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(
+            self.parameters(), 
+            lr=self.hparams.learning_rate, 
+            weight_decay=self.hparams.weight_decay
+        )
+        
+        # Learning rate scheduler
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, 
+            mode='min', 
+            factor=0.8, 
+            patience=3, 
+            verbose=False
+        )
+        
+        return {
+            'optimizer': optimizer,
+            'lr_scheduler': {
+                'scheduler': scheduler,
+                'monitor': 'val_loss'
+            }
+        }
+
+
+
+def prepare_lstm_data(df, inputs, output, train_test_only = True):
     set_seed()
     
-    # Initialize scalers
     scaler_X = StandardScaler()
     scaler_y = StandardScaler()
 
-    #Split data set
-    lstm_train, lstm_test = train_test_split(all_lstm_data)
+    train, val, test = train_val_test_split(df)
 
-    X_train_notscaled = lstm_train[inputs]
-    X_test_notscaled = lstm_test[inputs]
+    scaler_X = StandardScaler()
+    scaler_y = StandardScaler()
 
-    y_train_notscaled = lstm_train[output]
-    y_test_notscaled = lstm_test[output]
+    X_train_notscaled = train[inputs]
+    X_val_notscaled = val[inputs]
+    X_test_notscaled = test[inputs]
 
-    # Scale parameters for more efficient optimization
+    y_train_notscaled = train[output]
+    y_val_notscaled = val[output]
+    y_test_notscaled = test[output]
+
+    # Scale 
     X_train = scaler_X.fit_transform(X_train_notscaled)
+    X_val = scaler_X.transform(X_val_notscaled)
     X_test = scaler_X.transform(X_test_notscaled)
-    y_train = scaler_y.fit_transform(y_train_notscaled .values.reshape(-1, 1))
+    
+    y_train = scaler_y.fit_transform(y_train_notscaled.values.reshape(-1, 1))
+    y_val = scaler_y.transform(y_val_notscaled.values.reshape(-1, 1))
     y_test = scaler_y.transform(y_test_notscaled.values.reshape(-1, 1))
 
-    # Convert to pytorch tensor
-    X_train = torch.from_numpy(X_train).float()
+    # Convert to tensors
+    X_train = torch.from_numpy(X_train).float().unsqueeze(1)
     y_train = torch.from_numpy(y_train).float()
-    X_test = torch.from_numpy(X_test).float()
+    
+    X_val = torch.from_numpy(X_val).float().unsqueeze(1)
+    y_val = torch.from_numpy(y_val).float()
+    
+    X_test = torch.from_numpy(X_test).float().unsqueeze(1)
     y_test = torch.from_numpy(y_test).float()
 
-    X_train = X_train.unsqueeze(1)
-    X_test = X_test.unsqueeze(1)
-    return X_train, X_test, y_train, y_test, scaler_X, scaler_y
+    return (X_train, y_train), (X_val, y_val), (X_test, y_test), scaler_X, scaler_y
+
+
+
+def train_lstm_model(all_lstm_data, inputs, output,
+ learning_rate=0.0005,
+ hidden_size=16,
+ output_size=1,
+ num_epochs=100,
+ batch_size=64,
+ weight_decay=0.1,
+ verbose=False):
+    """
+    Train LSTM model using PyTorch Lightning with explicit device handling for Mac
+    """
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
+    
+    set_seed()
+    # Prepare data
+    (X_train, y_train), (X_val, y_val), (X_test, y_test), scaler_X, scaler_y = prepare_lstm_data(
+        all_lstm_data, inputs, output
+    )
+    
+    # Convert tensors to the correct device
+    X_train = torch.tensor(X_train).to(device)
+    y_train = torch.tensor(y_train).to(device)
+    X_val = torch.tensor(X_val).to(device)
+    y_val = torch.tensor(y_val).to(device)
+    X_test = torch.tensor(X_test).to(device)
+    y_test = torch.tensor(y_test).to(device)
+    
+    # Create datasets and dataloaders
+    train_dataset = TimeSeriesDataset(X_train, y_train)
+    val_dataset = TimeSeriesDataset(X_val, y_val)
+    test_dataset = TimeSeriesDataset(X_test, y_test)
+    
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    
+    # initialize model with specific hyperparameters
+    model = LSTM_Model(
+        input_size=X_train.shape[2],
+        hidden_size=hidden_size,
+        output_size=output_size,
+        learning_rate=learning_rate,
+        weight_decay=weight_decay
+    ).to(device)
+    
+    # callbacks for monitoring
+    early_stop_callback = pl.callbacks.EarlyStopping(
+        monitor='val_loss',
+        patience=10,
+        verbose=verbose,
+        mode='min'
+    )
+    
+    checkpoint_callback = pl.callbacks.ModelCheckpoint(
+        monitor='val_loss',
+        mode='min',
+        save_top_k=1,
+        filename='best_lstm_model'
+    )
+    
+    # logger to track metrics
+    logger = pl.loggers.TensorBoardLogger(
+        save_dir='lightning_logs',
+        name='lstm_model'
+    )
+    
+    # Configure trainer for MPS
+    trainer = pl.Trainer(
+        max_epochs=num_epochs,
+        callbacks=[early_stop_callback, checkpoint_callback],
+        logger=logger,
+        enable_progress_bar=False,
+        enable_model_summary=False,
+        accelerator='mps' if torch.backends.mps.is_available() else 'cpu',
+        devices=1
+    )
+    
+    # Fit the model
+    trainer.fit(model, train_loader, val_loader)
+    
+    # Load best model and ensure it's on the correct device
+    best_model = LSTM_Model.load_from_checkpoint(
+        checkpoint_callback.best_model_path
+    ).to(device)
+    best_model.eval()
+    
+    # Predictions
+    with torch.no_grad():
+        test_predictions = best_model(X_test)
+        
+        # Move predictions back to CPU for numpy conversion
+        test_predictions = test_predictions.cpu()
+        predictions_lstm = scaler_y.inverse_transform(test_predictions.numpy())
+        actuals_lstm = scaler_y.inverse_transform(y_test.cpu().numpy())
+    
+    # Metrics
+    mse_lstm = np.mean((predictions_lstm - actuals_lstm) ** 2)
+    rmse_lstm = np.sqrt(mse_lstm)
+    mae_lstm = np.mean(np.abs(predictions_lstm - actuals_lstm))
+    
+    if verbose:
+        print('Final LSTM Metrics:')
+        print('MSE:', mse_lstm)
+        print('RMSE:', rmse_lstm)
+        print('MAE:', mae_lstm)
+    
+    errors = [mse_lstm, rmse_lstm, mae_lstm]
+    return best_model, predictions_lstm, errors, scaler_X, scaler_y
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def prepare_sliding_windows(X, y, window_size):
@@ -103,6 +283,7 @@ def prepare_sliding_windows(X, y, window_size):
 
     X_windowed = []
     y_windowed = []
+        
     for i in range(len(X) - window_size + 1):
             X_window = X[i:i+window_size]
             y_window = y[i+window_size-1]
@@ -118,28 +299,39 @@ def prepare_lstm_data_with_windows(all_lstm_data, inputs, output, window_size):
     scaler_y = StandardScaler()
     
     # Split data set
-    lstm_train, lstm_test = train_test_split(all_lstm_data)
-    X_train_notscaled = lstm_train[inputs]
-    X_test_notscaled = lstm_test[inputs]
-    y_train_notscaled = lstm_train[output]
-    y_test_notscaled = lstm_test[output]
+    train, val, test = train_val_test_split(all_lstm_data)
+
+    X_train_notscaled = train[inputs]
+    X_val_notscaled = val[inputs]
+    X_test_notscaled = test[inputs]
+
+    y_train_notscaled = train[output]
+    y_val_notscaled = val[output]
+    y_test_notscaled = test[output]
+
+    # Scale 
+    X_train = scaler_X.fit_transform(X_train_notscaled)
+    X_val = scaler_X.transform(X_val_notscaled)
+    X_test = scaler_X.transform(X_test_notscaled)
     
-    # Scale parameters for more efficient optimization
-    X_train_scaled = scaler_X.fit_transform(X_train_notscaled)
-    X_test_scaled = scaler_X.transform(X_test_notscaled)
-    y_train_scaled = scaler_y.fit_transform(y_train_notscaled.values.reshape(-1, 1))
-    y_test_scaled = scaler_y.transform(y_test_notscaled.values.reshape(-1, 1))
-    
-    train_country_indices = lstm_train.index.get_level_values('Country')
-    test_country_indices = lstm_test.index.get_level_values('Country')
+    y_train = scaler_y.fit_transform(y_train_notscaled.values.reshape(-1, 1))
+    y_val = scaler_y.transform(y_val_notscaled.values.reshape(-1, 1))
+    y_test = scaler_y.transform(y_test_notscaled.values.reshape(-1, 1))
+
+    train_country_indices = train.index.get_level_values('Country')
+    val_country_indices = val.index.get_level_values('Country')
+    test_country_indices = test.index.get_level_values('Country')
     
     X_train_windowed, y_train_windowed = [], []
-    countries = lstm_train.index.get_level_values('Country').unique()
+    X_val_windowed, y_val_windowed = [], []
+    X_test_windowed, y_test_windowed = [], []
+
+    countries = train.index.get_level_values('Country').unique()
     
     for country in countries:
         country_indices = np.where(train_country_indices == country)[0]
-        X_train_country = X_train_scaled[country_indices]
-        y_train_country = y_train_scaled[country_indices]
+        X_train_country = X_train[country_indices]
+        y_train_country = y_train[country_indices]
         X_country_windowed, y_country_windowed = prepare_sliding_windows(X_train_country, y_train_country, window_size)
         X_train_windowed.append(X_country_windowed)
         y_train_windowed.append(y_country_windowed)
@@ -147,11 +339,22 @@ def prepare_lstm_data_with_windows(all_lstm_data, inputs, output, window_size):
     X_train_windowed = np.concatenate(X_train_windowed, axis=0)
     y_train_windowed = np.concatenate(y_train_windowed, axis=0)
     
-    X_test_windowed, y_test_windowed = [], []
+    for country in countries:
+        country_indices = np.where(val_country_indices == country)[0]
+        X_country = X_val[country_indices]
+        y_country = y_val[country_indices]
+        X_country_windowed, y_country_windowed = prepare_sliding_windows(X_country, y_country, window_size)
+        X_val_windowed.append(X_country_windowed)
+        y_val_windowed.append(y_country_windowed)
+
+    X_val_windowed = np.concatenate(X_val_windowed, axis=0)
+    y_val_windowed = np.concatenate(y_val_windowed, axis=0)
+    
+    # for loop to prevent data leakage between the countries while still creating windows.
     for country in countries:
         country_indices = np.where(test_country_indices == country)[0]
-        X_country = X_test_scaled[country_indices]
-        y_country = y_test_scaled[country_indices]
+        X_country = X_test[country_indices]
+        y_country = y_test[country_indices]
         X_country_windowed, y_country_windowed = prepare_sliding_windows(X_country, y_country, window_size)
         X_test_windowed.append(X_country_windowed)
         y_test_windowed.append(y_country_windowed)
@@ -162,113 +365,117 @@ def prepare_lstm_data_with_windows(all_lstm_data, inputs, output, window_size):
     #Convert to pytorch tensor
     X_train = torch.from_numpy(X_train_windowed).float()
     y_train = torch.from_numpy(y_train_windowed).float()
+    X_val = torch.from_numpy(X_val_windowed).float()
+    y_val = torch.from_numpy(y_val_windowed).float()
     X_test = torch.from_numpy(X_test_windowed).float()
     y_test = torch.from_numpy(y_test_windowed).float()
     
-    return X_train, X_test, y_train, y_test, scaler_X, scaler_y
+    return (X_train, y_train), (X_val, y_val), (X_test, y_test), scaler_X, scaler_y
 
 
-def train_lstm_model(all_lstm_data, inputs, output,
+def train_lstm_model_windows(all_lstm_data, inputs, output, 
+                     windows = 3,
                      learning_rate=0.0005,  
                      hidden_size=16,  
                      output_size=1, 
                      num_epochs=100, 
                      batch_size=64,  
                      weight_decay=0.1,  
-                     verbose=True):
+                     verbose=False):
     
     set_seed()
 
-    X_train, X_test, y_train, y_test, scaler_X, scaler_y = prepare_lstm_data(all_lstm_data, inputs, output)
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
 
-    train_dataset_lstm = TimeSeriesDataset(X_train, y_train)
-    val_dataset_lstm = TimeSeriesDataset(X_test, y_test)
+    (X_train, y_train), (X_val, y_val), (X_test, y_test), scaler_X, scaler_y = prepare_lstm_data_with_windows(all_lstm_data, inputs, output, windows)
 
-    train_loader_lstm = DataLoader(train_dataset_lstm, batch_size=batch_size, shuffle=True)
-    val_loader_lstm = DataLoader(val_dataset_lstm, batch_size=batch_size, shuffle=False)
+    X_train = torch.tensor(X_train).to(device)
+    y_train = torch.tensor(y_train).to(device)
+    X_val = torch.tensor(X_val).to(device)
+    y_val = torch.tensor(y_val).to(device)
+    X_test = torch.tensor(X_test).to(device)
+    y_test = torch.tensor(y_test).to(device)
     
-    model_lstm = LSTM_Model(input_size=X_train.shape[2], 
-                           hidden_size=hidden_size, 
-                           output_size=output_size)
-
-    optimizer_lstm = torch.optim.Adam(model_lstm.parameters(), lr = learning_rate)
+    # Create datasets and dataloaders
+    train_dataset = TimeSeriesDataset(X_train, y_train)
+    val_dataset = TimeSeriesDataset(X_val, y_val)
+    test_dataset = TimeSeriesDataset(X_test, y_test)
     
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_lstm, 
-                                                         mode='min', 
-                                                         factor=0.8, 
-                                                         patience=3, 
-                                                         verbose=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
     
-    criterion_lstm = nn.MSELoss()
-
-    train_losses_lstm = []
-    val_losses_lstm = []
-
-    for epoch in range(num_epochs):
-        # Training phase with gradient clipping
-        model_lstm.train()
-        epoch_train_loss = 0
-        train_batch_count = 0
-        
-        for X, y in train_loader_lstm:
-            optimizer_lstm.zero_grad()
-            output = model_lstm(X)
-            loss = criterion_lstm(output, y)
-            loss.backward()
-            
-            # Add gradient clipping
-            torch.nn.utils.clip_grad_norm_(model_lstm.parameters(), max_norm=1.0)
-            
-            optimizer_lstm.step()
-            epoch_train_loss += loss.item()
-            train_batch_count += 1
-        
-        avg_train_loss = epoch_train_loss / train_batch_count
-        train_losses_lstm.append(avg_train_loss)
-
-        # Validation phase
-        model_lstm.eval()
-        epoch_val_loss = 0
-        val_batch_count = 0
-        
-        with torch.no_grad():
-            for X, y in val_loader_lstm:
-                output = model_lstm(X)
-                val_loss = criterion_lstm(output, y)
-                epoch_val_loss += val_loss.item()
-                val_batch_count += 1
-        
-        avg_val_loss = epoch_val_loss / val_batch_count
-        val_losses_lstm.append(avg_val_loss)
-
-        # Update learning rate
-        scheduler.step(avg_val_loss)
-             
-        if verbose and (epoch + 1) % 10 == 0:
-            print(f'Epoch [{epoch+1}/{num_epochs}], Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}')
-            
-
-    plot_losses(train_losses_lstm, val_losses_lstm)
+    model = LSTM_Model(
+        input_size=X_train.shape[2],
+        hidden_size=hidden_size,
+        output_size=output_size,
+        learning_rate=learning_rate,
+        weight_decay=weight_decay
+    ).to(device)
     
-    # Evaluation of the model
-    model_lstm.eval()
+    early_stop_callback = pl.callbacks.EarlyStopping(
+        monitor='val_loss',
+        patience=10,
+        verbose=verbose,
+        mode='min'
+    )
+    
+    checkpoint_callback = pl.callbacks.ModelCheckpoint(
+        monitor='val_loss',
+        mode='min',
+        save_top_k=1,
+        filename='best_lstm_model'
+    )
+    
+    logger = pl.loggers.TensorBoardLogger(
+        save_dir='lightning_logs',
+        name='lstm_model'
+    )
+    
+    trainer = pl.Trainer(
+        max_epochs=num_epochs,
+        callbacks=[early_stop_callback, checkpoint_callback],
+        logger=logger,
+        enable_progress_bar=False,
+        enable_model_summary=False,
+        accelerator='mps' if torch.backends.mps.is_available() else 'cpu',
+        devices=1
+    )
+    
+    # fit the model
+    trainer.fit(model, train_loader, val_loader)
+    
+    # load best model and ensure it's on the correct device
+    best_model = LSTM_Model.load_from_checkpoint(
+        checkpoint_callback.best_model_path
+    ).to(device)
+    best_model.eval()
+    
+
     with torch.no_grad():
-        final_predictions = model_lstm(X_test)
-        predictions_lstm = scaler_y.inverse_transform(final_predictions.numpy())
-        actuals_lstm = scaler_y.inverse_transform(y_test.numpy())
+        test_predictions = best_model(X_test)
+        
+        # move predictions back to CPU for numpy conversion
+        test_predictions = test_predictions.cpu()
+        predictions_lstm = scaler_y.inverse_transform(test_predictions.numpy())
+        actuals_lstm = scaler_y.inverse_transform(y_test.cpu().numpy())
     
+    # metrics
     mse_lstm = np.mean((predictions_lstm - actuals_lstm) ** 2)
     rmse_lstm = np.sqrt(mse_lstm)
     mae_lstm = np.mean(np.abs(predictions_lstm - actuals_lstm))
     
-    print('Final LSTM Metrics:')
-    print('MSE:', mse_lstm)
-    print('RMSE:', rmse_lstm)
-    print('MAE:', mae_lstm)
-
+    if verbose:
+        print('Final LSTM Metrics:')
+        print('MSE:', mse_lstm)
+        print('RMSE:', rmse_lstm)
+        print('MAE:', mae_lstm)
+    
     errors = [mse_lstm, rmse_lstm, mae_lstm]
-
-    return model_lstm, predictions_lstm, errors, scaler_X, scaler_y
+    return best_model, predictions_lstm, errors, scaler_X, scaler_y
 
 def get_lstm_input(df, lags):
     variables_unlagged = df.columns
@@ -281,6 +488,7 @@ def get_lstm_input(df, lags):
 def create_lstm_data(df, lags):
     final_data = pd.DataFrame()
     countries = df.index.get_level_values('Country').unique()
+    # for loop to prevent data leakage between countries
     for country in countries:
         country_data = hp.get_country(df, country).copy()
         for col in df.columns:
@@ -297,24 +505,23 @@ def train_test_split(df):
     test = test.dropna()
     return train, test
 
-def train_val_test_split(df, val_ratio=0.15):
+def train_val_test_split(df, val_fraction=0.85):
     """
     Split the data into training, validation, and test sets while preserving time order
     """
     train, test = hp.time_panel_split_predict(df)
+    train_final = pd.DataFrame()
+    val = pd.DataFrame()
+    countries = df.index.get_level_values('Country').unique()
     
-    # Calculate split point for validation set
-    train_len = len(train)
-    val_size = int(train_len * val_ratio)
+    for country in countries:
+        country_train_data = hp.get_country(train, country).sort_values(by='TIME_PERIOD')
+        split_idx = int(len(country_train_data) * val_fraction)
+        
+        train_final = pd.concat([train_final, country_train_data.iloc[:split_idx]])
+        
+        val = pd.concat([val, country_train_data.iloc[split_idx:]])
     
-    # Split training data into train and validation
-    val_split_idx = train_len - val_size
-    
-    # Split while maintaining index
-    train_final = train.iloc[:val_split_idx]
-    val = train.iloc[val_split_idx:]
-    
-    # Drop any rows with NaN values
     train_final = train_final.dropna()
     val = val.dropna()
     test = test.dropna()
@@ -351,8 +558,6 @@ def get_LSTM_RMSE_TOTAL(model, all_lstm_data, inputs, output):
         # print('MAE:', full_mae)
         return full_rmse
     
-
-
 def fill_forecast_values(df, inputs, variable, dict):
     model, _, _, scaler_X, scaler_y = dict[variable]
     forecast_features = df[inputs]    
@@ -385,3 +590,98 @@ def plot_losses(train_losses, val_losses, title="Training and Validation Loss"):
     plt.legend()
     plt.grid(True)
     plt.show()
+
+
+def find_learning_rate(all_lstm_data, inputs, output,
+                       hidden_size=16,
+                       output_size=1,
+                       batch_size=64,
+                       min_lr=1e-5,
+                       max_lr=1,
+                       num_iter=100,
+                       plot_results=True):
+    """
+    Find the optimal learning rate for the LSTM model using PyTorch Lightning's learning rate finder.
+    
+    Parameters:
+    -----------
+    (Same as before)
+    """
+    import pytorch_lightning as pl
+    from pytorch_lightning.tuner import Tuner
+    import matplotlib.pyplot as plt
+    import torch
+    import torch.nn as nn
+    from torch.utils.data import DataLoader
+    
+    set_seed()
+    
+    (X_train, y_train), (X_val, y_val), (X_test, y_test), scaler_X, scaler_y = prepare_lstm_data(all_lstm_data, inputs, output)
+    
+    train_dataset = TimeSeriesDataset(X_train, y_train)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    
+    class LightningLSTM(pl.LightningModule):
+        def __init__(self, input_size, hidden_size, output_size, learning_rate=1e-3):
+            super().__init__()
+            self.save_hyperparameters()  
+            self.model = LSTM_Model(input_size, hidden_size, output_size)
+            self.criterion = nn.MSELoss()
+            
+        def forward(self, x):
+            return self.model(x)
+        
+        def training_step(self, batch, batch_idx):
+            x, y = batch
+            y_hat = self(x)
+            loss = self.criterion(y_hat, y)
+            self.log('train_loss', loss)
+            return loss
+            
+        def configure_optimizers(self):
+            optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
+            return optimizer
+    
+    # Create model with explicit learning rate
+    model = LightningLSTM(
+        input_size=X_train.shape[2], 
+        hidden_size=hidden_size, 
+        output_size=output_size,
+        learning_rate=1e-3  
+    )
+    
+    # Initialize trainer
+    trainer = pl.Trainer(
+        max_epochs=1,
+        enable_progress_bar=False,
+        enable_checkpointing=False,
+        enable_model_summary=False,
+    )
+    
+    # create a tuner for the trainer
+    tuner = Tuner(trainer)
+    
+    # Run the learning rate finder with explicit range
+    print("Finding optimal learning rate...")
+    lr_finder = tuner.lr_find(
+        model,
+        train_dataloaders=train_loader,
+        min_lr=min_lr,
+        max_lr=max_lr,
+        num_training=num_iter
+    )
+    
+    suggested_lr = lr_finder.suggestion()
+    
+    if plot_results and lr_finder is not None:
+        fig, ax = plt.subplots(figsize=(10, 6))
+        lr_finder.plot(ax=ax, suggest=True)
+        plt.xscale('log')
+        plt.xlabel('Learning Rate (log scale)')
+        plt.ylabel('Loss')
+        plt.title('Learning Rate Finder Results')
+        plt.tight_layout()
+        plt.show()
+    
+    print(f"Suggested learning rate: {suggested_lr:.8f}")
+    return suggested_lr

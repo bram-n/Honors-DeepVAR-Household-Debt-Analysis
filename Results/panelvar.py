@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import helpers as hp
 import pandas as pd
+from scipy.linalg import cholesky
+
 def create_coefficient_matrices(coef_df):
     """
     Create coefficient matrices from the panel VAR coefficient DataFrame
@@ -23,21 +25,22 @@ def create_coefficient_matrices(coef_df):
         start_idx = (lag - 1) * n_vars
         lag_coeffs = coef_df.iloc[start_idx:start_idx + n_vars]
         
-        # Fill the matrix with coefficients
-        lag_matrix[0, :] = lag_coeffs['GDP_eq']  # GDP equation coefficients
-        lag_matrix[1, :] = lag_coeffs['HD_eq']   # Household Debt equation coefficients
-        lag_matrix[2, :] = lag_coeffs['PD_eq']   # Private Debt equation coefficients
+        
+        lag_matrix[0, :] = lag_coeffs['GDP_eq']  
+        lag_matrix[1, :] = lag_coeffs['HD_eq']   
+        lag_matrix[2, :] = lag_coeffs['PD_eq']  
         
         coeff_matrices.append(lag_matrix)
     
     return coeff_matrices
 
-def compute_irf(coeff_matrices, periods=10, shock_var=0, shock_size=1.0):
+def compute_irf(coeff_matrices, sigma, periods=10, shock_var=0, shock_size=1.0):
     """
     Compute Impulse Response Function
     
     Parameters:
     coeff_matrices: list of coefficient matrices for each lag
+    sigma: covariance matrix of the variables
     periods: number of periods to forecast
     shock_var: index of variable to shock (0=GDP, 1=HD, 2=PD)
     shock_size: size of the shock
@@ -45,39 +48,28 @@ def compute_irf(coeff_matrices, periods=10, shock_var=0, shock_size=1.0):
     Returns:
     irf_result: array of shape (periods, n_vars) containing IRF values
     """
-    n_vars = coeff_matrices[0].shape[0]
-    irf = np.zeros((periods, n_vars))
+    # Add Stata's contemporary effects adjustment
+    col = cholesky(sigma)
+    diag = np.diag(np.diag(col))
+    A = col @ np.linalg.inv(diag)
     
-    # Initial shock
-    shock = np.zeros(n_vars)
-    shock[shock_var] = shock_size
-    irf[0] = shock
+    irf = np.zeros((periods, len(A)))
+    irf[0] = A[:, shock_var] * shock_size
     
-    # Compute IRF
     for t in range(1, periods):
-        for lag, coeff_matrix in enumerate(coeff_matrices, 1):
+        for lag, coeff in enumerate(coeff_matrices, 1):
             if t >= lag:
-                irf[t] += coeff_matrix @ irf[t-lag]
+                irf[t] += coeff @ irf[t-lag]
     
     return irf
 
 def run_panel_VAR_predict(df, test, lags, coeff_matrices):
-    """
-    Run panel VAR predictions using pre-estimated coefficient matrices
+    # Get only the variables we're modeling (should be 3: GDP, HD, PD)
+    model_vars = ['log_GDP', 'household_debt', 'private_debt']
     
-    Parameters:
-    df: DataFrame containing the data for initial values
-    test: test dataset to predict for
-    lags: number of lags
-    coeff_matrices: list of coefficient matrices
-    
-    Returns:
-    predictions_df: DataFrame with predictions
-    test: actual test values
-    """
-    # Get the last lags periods of data before test period
+    # Get the last lags periods of data before test period, but only for modeled variables
     initial_values = df[df.index.get_level_values('TIME_PERIOD') < 
-                       test.index.get_level_values('TIME_PERIOD')[0]].tail(lags).values
+                       test.index.get_level_values('TIME_PERIOD')[0]][model_vars].tail(lags).values
     
     # Number of periods to forecast
     n_periods = len(test)
@@ -102,7 +94,7 @@ def run_panel_VAR_predict(df, test, lags, coeff_matrices):
     country = test.index.get_level_values('Country')[0]
     prediction_index = pd.MultiIndex.from_product([[country], time_periods], 
                                                 names=['Country', 'TIME_PERIOD'])
-    predictions_df = pd.DataFrame(forecast, columns=test.columns, index=prediction_index)
+    predictions_df = pd.DataFrame(forecast, columns=model_vars, index=prediction_index)
     
     return predictions_df, test
 
@@ -188,5 +180,28 @@ def generate_irf_from_coefficients(coef_df, shock_var=1, shock_size=1.0, periods
                   shock_size=shock_size)
     
     return fig, irf_result
+
+def get_test_errors(df, test, lags, variable, coeff_df):
+    countries = df.index.get_level_values('Country').unique()
+    total_squared_error = 0
+    total_absolute_error = 0 
+    total_samples = 0
+    
+    coeff_matrices = create_coefficient_matrices(coeff_df)
+    for country in countries:
+        fitted_values, actual_values = get_panel_VAR_predict(df, test, country, lags, coeff_matrices)
+        mse = hp.calculate_mse(actual_values, fitted_values, variable)
+        total_squared_error += mse * len(actual_values[variable]) 
+        mae = hp.calculate_mae(actual_values, fitted_values, variable)
+        total_absolute_error += mae * len(actual_values[variable])
+        
+        total_samples += len(actual_values[variable])
+        
+        # print(f"{country} MAE: {mae}")
+    
+    total_mse = total_squared_error / total_samples
+    rmse = np.sqrt(total_mse)
+    total_mae = total_absolute_error / total_samples #TODO check why this return was mae?
+    return [total_mse, rmse, total_mae]
 
 

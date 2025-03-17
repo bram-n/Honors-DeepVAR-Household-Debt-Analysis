@@ -30,16 +30,15 @@ def plot_country_comparison(country, variable, inputs_lstm, inputs_var, lags, va
 
 
 def plot_country_predictions_test(country, variable, inputs, lags, df, dict, train_dt_var, test_dt_var, final_detrend, panel_var_coef, train_fraction=0.8):
-    # VAR graph prediction/preparation
+    
     country_data = hp.get_country(df, country)
     country_var_detrend_predict, _ = var.get_VAR_predict(final_detrend, train_dt_var, test_dt_var, country, lags)
-
 
     coeff_matrices = pvar.create_coefficient_matrices(panel_var_coef)
     panel_predictions, _ = pvar.get_panel_VAR_predict(
         final_detrend, test_dt_var, country, lags, coeff_matrices
     )
-    # LSTM predictions on actual data
+    # LSTM predictions 
     country_test_data = hp.get_test_data(country_data, train_fraction=train_fraction)
     lstm_predict = lstm.fill_forecast_values(country_test_data, inputs, variable, dict)
 
