@@ -1,0 +1,16 @@
+lightning_logs/
+wandb/
+tensorboard/
+*.ckpt
+checkpoints/
+
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache
+/Results/.lr_find_*.ckpt
+.lr_find_*.ckpt

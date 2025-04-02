@@ -1,6 +1,0 @@
-hidden_size: 16
-input_size: 6
-learning_rate: 0.0012022644346174128
-num_layers: 1
-output_size: 1
-weight_decay: 0.1

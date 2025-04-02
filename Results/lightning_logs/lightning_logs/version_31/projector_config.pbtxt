@@ -1,5 +1,0 @@
-embeddings {
-  tensor_name: "Country_index:00570"
-  metadata_path: "00570/Country_index/metadata.tsv"
-  tensor_path: "00570/Country_index/tensors.tsv"
-}
